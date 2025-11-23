@@ -1,0 +1,182 @@
+From f351f982bf76ff1f343d6127ca105e9e0ea2f97c Mon Sep 17 00:00:00 2001
+From: Andy Lin <andylinpersonal@gmail.com>
+Date: Thu, 20 Nov 2025 19:24:22 +0800
+Subject: [PATCH] RISC-V: Add interrupt attribute WCH-Interrupt-fast and xw
+ vendor extension.
+
+Signed-off-by: Andy Lin <andylinpersonal@gmail.com>
+---
+ gcc/common/config/riscv/riscv-common.cc |  4 +++
+ gcc/config/riscv/riscv.cc               | 42 ++++++++++++++++++++++---
+ gcc/config/riscv/riscv.opt              |  5 +++
+ gcc/doc/invoke.texi                     |  4 +++
+ 4 files changed, 51 insertions(+), 4 deletions(-)
+
+diff --git a/gcc/common/config/riscv/riscv-common.cc b/gcc/common/config/riscv/riscv-common.cc
+index b34409adf..51fe6e696 100644
+--- a/gcc/common/config/riscv/riscv-common.cc
++++ b/gcc/common/config/riscv/riscv-common.cc
+@@ -442,6 +442,8 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
+   {"xsfvqmaccdod",    ISA_SPEC_CLASS_NONE, 1, 0},
+   {"xsfvfnrclipxfqf", ISA_SPEC_CLASS_NONE, 1, 0},
+ 
++  {"xwchc", ISA_SPEC_CLASS_NONE, 1, 0},
++
+   /* Terminate the list.  */
+   {NULL, ISA_SPEC_CLASS_NONE, 0, 0}
+ };
+@@ -1778,6 +1780,8 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
+   RISCV_EXT_FLAG_ENTRY ("xsfvqmaccdod",    x_riscv_sifive_subext, MASK_XSFVQMACCDOD),
+   RISCV_EXT_FLAG_ENTRY ("xsfvfnrclipxfqf", x_riscv_sifive_subext, MASK_XSFVFNRCLIPXFQF),
+ 
++  RISCV_EXT_FLAG_ENTRY ("xwchc", x_riscv_xwchc_subext, MASK_XWCHC),
++
+   {NULL, NULL, NULL, 0}
+ };
+ 
+diff --git a/gcc/config/riscv/riscv.cc b/gcc/config/riscv/riscv.cc
+index bd0046ad2..2868f227e 100644
+--- a/gcc/config/riscv/riscv.cc
++++ b/gcc/config/riscv/riscv.cc
+@@ -164,7 +164,7 @@ struct GTY(())  riscv_frame_info {
+ };
+ 
+ enum riscv_privilege_levels {
+-  UNKNOWN_MODE, USER_MODE, SUPERVISOR_MODE, MACHINE_MODE
++  UNKNOWN_MODE, USER_MODE, SUPERVISOR_MODE, MACHINE_MODE, WCH_FAST_MODE
+ };
+ 
+ struct GTY(()) mode_switching_info {
+@@ -6566,11 +6566,11 @@ riscv_handle_type_attribute (tree *node ATTRIBUTE_UNUSED, tree name, tree args,
+ 
+ 	  string = TREE_STRING_POINTER (cst);
+ 	  if (strcmp (string, "user") && strcmp (string, "supervisor")
+-	      && strcmp (string, "machine"))
++	      && strcmp (string, "machine") && strcmp (string, "WCH-Interrupt-fast"))
+ 	    {
+ 	      warning (OPT_Wattributes,
+ 		       "argument to %qE attribute is not %<\"user\"%>, %<\"supervisor\"%>, "
+-		       "or %<\"machine\"%>", name);
++		       "%<\"machine\"%>, or %<\"WCH-Interrupt-fast\"%>", name);
+ 	      *no_add_attrs = true;
+ 	    }
+ 	}
+@@ -7481,6 +7481,13 @@ riscv_save_return_addr_reg_p (void)
+   return false;
+ }
+ 
++/* Return true if WCH fast interrupt hardware saves register REGNO */
++static bool
++riscv_wch_fast_interrupt_saved_reg (unsigned int regno)
++{
++	return call_used_or_fixed_reg_p(regno) || regno == RETURN_ADDR_REGNUM;
++}
++
+ /* Return true if the current function must save register REGNO.  */
+ 
+ static bool
+@@ -7490,6 +7497,16 @@ riscv_save_reg_p (unsigned int regno)
+   bool might_clobber = crtl->saves_all_registers
+ 		       || df_regs_ever_live_p (regno);
+ 
++  /* WCH Fast interrupts are hardware-saved.
++   *
++   * If this is a WCH fast mode interrupt, and if the register is one of
++   * the caller-saved set, or ra (which is what WCH saves for us), then we can
++   * rely on hardware to save the register */
++  if (cfun->machine->interrupt_handler_p
++      && cfun->machine->interrupt_mode == WCH_FAST_MODE
++      && riscv_wch_fast_interrupt_saved_reg(regno))
++	return false;
++
+   if (call_saved && might_clobber)
+     return true;
+ 
+@@ -7712,6 +7729,8 @@ riscv_compute_frame_info (void)
+      1, If we have a large frame, then we need to save/restore t0.  We check for
+      this before clearing the frame struct.
+      2, Need to save and restore some CSRs in the frame.  */
++
++  // TODO OPT - does this matter? T0 is theoretically restored for us; can we skip cleanup?
+   if (cfun->machine->interrupt_handler_p)
+     {
+       HOST_WIDE_INT step1 = riscv_first_stack_step (frame, frame->total_size);
+@@ -9331,7 +9350,7 @@ riscv_expand_epilogue (int style)
+ 
+       if (th_int_mask && TH_INT_INTERRUPT (cfun))
+ 	emit_jump_insn (gen_th_int_pop ());
+-      else if (mode == MACHINE_MODE)
++      else if (mode == MACHINE_MODE || mode == WCH_FAST_MODE)
+ 	emit_jump_insn (gen_riscv_mret ());
+       else if (mode == SUPERVISOR_MODE)
+ 	emit_jump_insn (gen_riscv_sret ());
+@@ -9355,6 +9374,13 @@ riscv_expand_epilogue (int style)
+ bool
+ riscv_epilogue_uses (unsigned int regno)
+ {
++  /* The WCH hardware will restore some regs in a fast interrupt
++   * so those regs are dead */
++  if (epilogue_completed && cfun->machine->interrupt_handler_p
++      && cfun->machine->interrupt_mode == WCH_FAST_MODE
++      && riscv_wch_fast_interrupt_saved_reg (regno))
++	return false;
++
+   if (regno == RETURN_ADDR_REGNUM)
+     return true;
+ 
+@@ -11209,6 +11235,8 @@ riscv_get_interrupt_type (tree decl)
+ 	return USER_MODE;
+       else if (!strcmp (string, "supervisor"))
+ 	return SUPERVISOR_MODE;
++      else if (!strcmp (string, "WCH-Interrupt-fast"))
++        return WCH_FAST_MODE;
+       else /* Must be "machine".  */
+ 	return MACHINE_MODE;
+     }
+@@ -11432,6 +11460,12 @@ bool
+ riscv_hard_regno_rename_ok (unsigned from_regno ATTRIBUTE_UNUSED,
+ 			    unsigned to_regno)
+ {
++  /* For WCH fast interrupts, TO_REG may also be any of the hardware saved registers */
++  if (cfun->machine->interrupt_handler_p
++      && cfun->machine->interrupt_mode == WCH_FAST_MODE
++      && riscv_wch_fast_interrupt_saved_reg (to_regno))
++    return true;
++
+   /* Interrupt functions can only use registers that have already been
+      saved by the prologue, even if they would normally be
+      call-clobbered.  */
+diff --git a/gcc/config/riscv/riscv.opt b/gcc/config/riscv/riscv.opt
+index 7515c8ea1..5a690c735 100644
+--- a/gcc/config/riscv/riscv.opt
++++ b/gcc/config/riscv/riscv.opt
+@@ -535,6 +535,11 @@ Mask(XSFVQMACCDOD) Var(riscv_sifive_subext)
+ 
+ Mask(XSFVFNRCLIPXFQF) Var(riscv_sifive_subext)
+ 
++TargetVariable
++int riscv_xwchc_subext
++
++Mask(XWCHC)  Var(riscv_xwchc_subext)
++
+ TargetVariable
+ int riscv_fmv_priority = 0
+ 
+diff --git a/gcc/doc/invoke.texi b/gcc/doc/invoke.texi
+index 64a3131c1..6eed68b47 100644
+--- a/gcc/doc/invoke.texi
++++ b/gcc/doc/invoke.texi
+@@ -31591,6 +31591,10 @@ to @samp{zvks} and @samp{zvkg}.
+ @tab 1.0
+ @tab Ventana integer conditional operations extension.
+ 
++@item xwchc
++@tab 1.0
++@tab Qinheng (WCH) QingKe Compressed Instruction Extension.
++
+ @end multitable
+ 
+ When @option{-march=} is not specified, use the setting from @option{-mcpu}.
+-- 
+2.43.0
+

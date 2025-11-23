@@ -1,0 +1,286 @@
+From b9ea67a2f649f5e18681af195b2d2bd463a74ec3 Mon Sep 17 00:00:00 2001
+From: Andy Lin <andylinpersonal@gmail.com>
+Date: Mon, 24 Nov 2025 18:18:09 +0800
+Subject: [PATCH] RISC-V: Add support for XW extension on some WCH cores
+
+v1 -> v2:
+  xw -> xwchc to align with LLVM's existing patch.
+
+Signed-off-by: Andy Lin <andylinpersonal@gmail.com>
+---
+ bfd/elfxx-riscv.c          | 13 ++++++++++++-
+ include/ChangeLog          |  5 +++++
+ include/opcode/riscv-opc.h | 26 ++++++++++++++++++++++++++
+ include/opcode/riscv.h     | 24 ++++++++++++++++++++++++
+ opcodes/ChangeLog          |  5 +++++
+ opcodes/riscv-dis.c        | 23 +++++++++++++++++++++++
+ opcodes/riscv-opc.c        | 18 ++++++++++++++++++
+ 7 files changed, 113 insertions(+), 1 deletion(-)
+
+diff --git a/bfd/elfxx-riscv.c b/bfd/elfxx-riscv.c
+index a6511f6..22e05ca 100644
+--- a/bfd/elfxx-riscv.c
++++ b/bfd/elfxx-riscv.c
+@@ -1505,6 +1505,7 @@ static struct riscv_supported_ext riscv_supported_vendor_x_ext[] =
+   {"xsfvqmaccqoq",	ISA_SPEC_CLASS_DRAFT,	1, 0, 0},
+   {"xsfvqmaccdod",	ISA_SPEC_CLASS_DRAFT,	1, 0, 0},
+   {"xsfvfnrclipxfqf",	ISA_SPEC_CLASS_DRAFT,	1, 0, 0},
++  {"xwchc",		ISA_SPEC_CLASS_DRAFT,	1, 0, 0 },
+   {NULL, 0, 0, 0, 0}
+ };
+ 
+@@ -2115,6 +2116,12 @@ riscv_parse_check_conflicts (riscv_parse_subset_t *rps)
+ 	(_("`xtheadvector' is conflict with the `v' extension"));
+       no_conflict = false;
+     }
++  if (riscv_subset_supports (rps, "xwchc")
++      && (riscv_subset_supports (rps, "d") || riscv_subset_supports (rps, "zcb")))
++    {
++      rps->error_handler (_("xwchc' is conflict with the `d/zcb' extension"));
++      no_conflict = false;
++    }
+ 
+   bool support_zve = false;
+   bool support_zvl = false;
+@@ -2794,6 +2801,8 @@ riscv_multi_subset_supports (riscv_parse_subset_t *rps,
+       return riscv_subset_supports (rps, "xsfvqmaccdod");
+     case INSN_CLASS_XSFVFNRCLIPXFQF:
+       return riscv_subset_supports (rps, "xsfvfnrclipxfqf");
++    case INSN_CLASS_XWCHC:
++      return riscv_subset_supports (rps, "xwchc");
+     default:
+       rps->error_handler
+         (_("internal: unreachable INSN_CLASS_*"));
+@@ -2868,7 +2877,7 @@ riscv_multi_subset_supports_ext (riscv_parse_subset_t *rps,
+ 	{
+ 	  if (!riscv_subset_supports (rps, "c")
+ 	      && !riscv_subset_supports (rps, "zcf"))
+-	    return _("f' and `c', or `f' and `zcf"); 
++	    return _("f' and `c', or `f' and `zcf");
+ 	  else
+ 	    return "f";
+ 	}
+@@ -3074,6 +3083,8 @@ riscv_multi_subset_supports_ext (riscv_parse_subset_t *rps,
+       return "xtheadzvamo";
+     case INSN_CLASS_XSFCEASE:
+       return "xsfcease";
++    case INSN_CLASS_XWCHC:
++      return "xwchc";
+     default:
+       rps->error_handler
+         (_("internal: unreachable INSN_CLASS_*"));
+diff --git a/include/ChangeLog b/include/ChangeLog
+index 45fc628..d42158a 100644
+--- a/include/ChangeLog
++++ b/include/ChangeLog
+@@ -1,3 +1,8 @@
++2025-11-23  Andy Lin <andylinpersonal@gmail.com>
++
++	* opcode/riscv-opc.h: Add MATCH and MASK opcode macros for Xwchc.
++	* opcode/riscv.h (riscv_insn_class): Add INSN_CLASS_XWCHC.
++
+ 2024-07-20  Nick Clifton  <nickc@redhat.com>
+ 
+ 	* 2.43 branch point.
+diff --git a/include/opcode/riscv-opc.h b/include/opcode/riscv-opc.h
+index 253148b..365f944 100644
+--- a/include/opcode/riscv-opc.h
++++ b/include/opcode/riscv-opc.h
+@@ -3745,6 +3745,23 @@
+ /* Vendor-specific (SiFive) cease instruction.  */
+ #define MATCH_SF_CEASE 0x30500073
+ #define MASK_SF_CEASE 0xffffffff
++/* Qinheng QingKe Xw instructions. */
++#define MATCH_XWCHC_LBU 0x2000
++#define MASK_XWCHC_LBU 0xe003
++#define MATCH_XWCHC_LHU 0x2002
++#define MASK_XWCHC_LHU 0xe003
++#define MATCH_XWCHC_SB 0xa000
++#define MASK_XWCHC_SB 0xe003
++#define MATCH_XWCHC_SH 0xa002
++#define MASK_XWCHC_SH 0xe003
++#define MATCH_XWCHC_LBUSP 0x8000
++#define MASK_XWCHC_LBUSP 0xf863
++#define MATCH_XWCHC_LHUSP 0x8020
++#define MASK_XWCHC_LHUSP 0xf863
++#define MATCH_XWCHC_SBSP 0x8040
++#define MASK_XWCHC_SBSP 0xf863
++#define MATCH_XWCHC_SHSP 0x8060
++#define MASK_XWCHC_SHSP 0xf863
+ /* SiFive custom int8 matrix-multiply instruction.  */
+ #define MATCH_SFVQMACCU4X8X4 0xf200205b
+ #define MASK_SFVQMACCU4X8X4 0xfe00707f
+@@ -4884,6 +4901,15 @@ DECLARE_INSN(th_sync_s, MATCH_TH_SYNC_S, MASK_TH_SYNC_S)
+ /* XVentanaCondOps instructions. */
+ DECLARE_INSN(vt_maskc, MATCH_VT_MASKC, MASK_VT_MASKC)
+ DECLARE_INSN(vt_maskcn, MATCH_VT_MASKCN, MASK_VT_MASKCN)
++/* Vendor-specific (Qinheng QingKe Xw) instructions. */
++DECLARE_INSN(qk_c_lbu, MATCH_XWCHC_LBU, MASK_XWCHC_LBU)
++DECLARE_INSN(qk_c_lhu, MATCH_XWCHC_LHU, MASK_XWCHC_LHU)
++DECLARE_INSN(qk_c_sb, MATCH_XWCHC_SB, MASK_XWCHC_SB)
++DECLARE_INSN(qk_c_sh, MATCH_XWCHC_SH, MASK_XWCHC_SH)
++DECLARE_INSN(qk_c_lbusp, MATCH_XWCHC_LBUSP, MASK_XWCHC_LBUSP)
++DECLARE_INSN(qk_c_lhusp, MATCH_XWCHC_LHUSP, MASK_XWCHC_LHUSP)
++DECLARE_INSN(qk_c_sbsp, MATCH_XWCHC_SBSP, MASK_XWCHC_SBSP)
++DECLARE_INSN(qk_c_shsp, MATCH_XWCHC_SHSP, MASK_XWCHC_SHSP)
+ #endif /* DECLARE_INSN */
+ #ifdef DECLARE_CSR
+ /* Unprivileged Counter/Timers CSRs.  */
+diff --git a/include/opcode/riscv.h b/include/opcode/riscv.h
+index fedfdd2..385d867 100644
+--- a/include/opcode/riscv.h
++++ b/include/opcode/riscv.h
+@@ -132,6 +132,15 @@ static inline unsigned int riscv_insn_length (insn_t insn)
+   ((RV_X(x, 25, 1)) | (RV_X(x, 20, 5) << 1) | (RV_IMM_SIGN_N(x, 20, 5) << 5))
+ #define EXTRACT_CV_SIMD_UIMM6(x) \
+   ((RV_X(x, 25, 1)) | (RV_X(x, 20, 5) << 1))
++/* Vendor-specific (Qinheng QingKe Xw) extract macros.  */
++#define EXTRACT_XWCHC_UIMM5(x) \
++  ((RV_X(x, 12, 1)) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 5, 2) << 1))
++#define EXTRACT_XWCHC_UIMM6_LSB0(x) \
++  ((RV_X(x, 10, 3) << 3) | (RV_X(x, 5, 2) << 1))
++#define EXTRACT_XWCHC_UIMM4(x) \
++  (RV_X(x, 7, 4))
++#define EXTRACT_XWCHC_UIMM5_LSB0(x) \
++  ((RV_X(x, 8, 3) << 1) | (RV_X(x, 7, 1) << 4))
+ 
+ #define ENCODE_ITYPE_IMM(x) \
+   (RV_X(x, 0, 12) << 20)
+@@ -200,6 +209,15 @@ static inline unsigned int riscv_insn_length (insn_t insn)
+   ((RV_X(x, 0, 1) << 25) | (RV_X(x, 1, 5) << 20))
+ #define ENCODE_CV_SIMD_UIMM6(x) \
+   ((RV_X(x, 0, 1) << 25) | (RV_X(x, 1, 5) << 20))
++/* Vendor-specific (Qinheng QingKe Xw) encode macros.  */
++#define ENCODE_XWCHC_UIMM5(x) \
++  ((RV_X(x, 0, 1) << 12) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 1, 2) << 5))
++#define ENCODE_XWCHC_UIMM6_LSB0(x) \
++  ((RV_X(x, 5, 1) << 12) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 1, 2) << 5))
++#define ENCODE_XWCHC_UIMM4(x) \
++  (RV_X(x, 0, 4) << 7)
++#define ENCODE_XWCHC_UIMM5_LSB0(x) \
++  ((RV_X(x, 1, 3) << 8) | (RV_X(x, 4, 1) << 7))
+ 
+ #define VALID_ITYPE_IMM(x) (EXTRACT_ITYPE_IMM(ENCODE_ITYPE_IMM(x)) == (x))
+ #define VALID_STYPE_IMM(x) (EXTRACT_STYPE_IMM(ENCODE_STYPE_IMM(x)) == (x))
+@@ -228,6 +246,11 @@ static inline unsigned int riscv_insn_length (insn_t insn)
+ #define VALID_ZCB_BYTE_UIMM(x) (EXTRACT_ZCB_BYTE_UIMM(ENCODE_ZCB_BYTE_UIMM(x)) == (x))
+ #define VALID_ZCB_HALFWORD_UIMM(x) (EXTRACT_ZCB_HALFWORD_UIMM(ENCODE_ZCB_HALFWORD_UIMM(x)) == (x))
+ #define VALID_ZCMP_SPIMM(x) (EXTRACT_ZCMP_SPIMM(ENCODE_ZCMP_SPIMM(x)) == (x))
++/* Vendor-specific (Qinheng QingKe Xw) validation macros.  */
++#define VALID_XWCHC_UIMM5(x) (EXTRACT_XWCHC_UIMM5(ENCODE_XWCHC_UIMM5(x)) == (x))
++#define VALID_XWCHC_UIMM6_LSB0(x) (EXTRACT_XWCHC_UIMM6_LSB0(ENCODE_XWCHC_UIMM6_LSB0(x)) == (x))
++#define VALID_XWCHC_UIMM4(x) (EXTRACT_XWCHC_UIMM4(ENCODE_XWCHC_UIMM4(x)) == (x))
++#define VALID_XWCHC_UIMM5_LSB0(x) (EXTRACT_XWCHC_UIMM5_LSB0(ENCODE_XWCHC_UIMM5_LSB0(x)) == (x))
+ 
+ #define RISCV_RTYPE(insn, rd, rs1, rs2) \
+   ((MATCH_ ## insn) | ((rd) << OP_SH_RD) | ((rs1) << OP_SH_RS1) | ((rs2) << OP_SH_RS2))
+@@ -557,6 +580,7 @@ enum riscv_insn_class
+   INSN_CLASS_XSFVQMACCQOQ,
+   INSN_CLASS_XSFVQMACCDOD,
+   INSN_CLASS_XSFVFNRCLIPXFQF,
++  INSN_CLASS_XWCHC,
+ };
+ 
+ /* This structure holds information for a particular instruction.  */
+diff --git a/opcodes/ChangeLog b/opcodes/ChangeLog
+index 4e7bc6d..65a3ee6 100644
+--- a/opcodes/ChangeLog
++++ b/opcodes/ChangeLog
+@@ -1,3 +1,8 @@
++2025-11-23  Andy Lin <andylinpersonal@gmail.com>
++
++	* riscv-opc.c (riscv_opcodes): Add Xwchc opcodes and aliases.
++	* riscv-dis.c (print_insn_args): Add Xwchc opcode to disassembler.
++
+ 2024-07-20  Nick Clifton  <nickc@redhat.com>
+ 
+ 	* 2.43 branch point.
+diff --git a/opcodes/riscv-dis.c b/opcodes/riscv-dis.c
+index c1212b1..b29c29fd 100644
+--- a/opcodes/riscv-dis.c
++++ b/opcodes/riscv-dis.c
+@@ -746,6 +746,29 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
+ 		  goto undefined_modifier;
+ 		}
+ 	      break;
++	    case 'w': /* Vendor-specific (Qinghen QingKe Xwchc) operands.  */
++	      switch (*++oparg)
++		{
++		case 'b':
++		  print (info->stream, dis_style_immediate, "%d",
++			 (unsigned)EXTRACT_XWCHC_UIMM5 (l));
++		  break;
++		case '6':
++		  print (info->stream, dis_style_immediate, "%d",
++			 (unsigned)EXTRACT_XWCHC_UIMM6_LSB0 (l));
++		  break;
++		case '4':
++		  print (info->stream, dis_style_immediate, "%d",
++			 (unsigned)EXTRACT_XWCHC_UIMM4 (l));
++		  break;
++		case '5':
++		  print (info->stream, dis_style_immediate, "%d",
++			 (unsigned)EXTRACT_XWCHC_UIMM5_LSB0 (l));
++		  break;
++		default:
++		  goto undefined_modifier;
++		}
++	      break;
+ 	    default:
+ 	      goto undefined_modifier;
+ 	    }
+diff --git a/opcodes/riscv-opc.c b/opcodes/riscv-opc.c
+index 200fe26..256d379 100644
+--- a/opcodes/riscv-opc.c
++++ b/opcodes/riscv-opc.c
+@@ -527,12 +527,16 @@ const struct riscv_opcode riscv_opcodes[] =
+ {"lb",          0, INSN_CLASS_I, "d,o(s)",    MATCH_LB, MASK_LB, match_opcode, INSN_DREF|INSN_1_BYTE },
+ {"lb",          0, INSN_CLASS_I, "d,A",       0, (int) M_Lx, match_rd_nonzero, INSN_MACRO },
+ {"lbu",         0, INSN_CLASS_ZCB, "Ct,Wcb(Cs)", MATCH_C_LBU, MASK_C_LBU, match_opcode, INSN_ALIAS|INSN_DREF|INSN_1_BYTE },
++{"lbu",        32, INSN_CLASS_XWCHC, "Ct,Xw4(Cc)", MATCH_XWCHC_LBUSP, MASK_XWCHC_LBUSP, match_opcode, INSN_ALIAS|INSN_DREF|INSN_1_BYTE },
++{"lbu",        32, INSN_CLASS_XWCHC, "Ct,Xwb(Cs)", MATCH_XWCHC_LBU, MASK_XWCHC_LBU, match_opcode, INSN_ALIAS|INSN_DREF|INSN_1_BYTE },
+ {"lbu",         0, INSN_CLASS_I, "d,o(s)",    MATCH_LBU, MASK_LBU, match_opcode, INSN_DREF|INSN_1_BYTE },
+ {"lbu",         0, INSN_CLASS_I, "d,A",       0, (int) M_Lx, match_rd_nonzero, INSN_MACRO },
+ {"lh",          0, INSN_CLASS_ZCB, "Ct,Wch(Cs)", MATCH_C_LH, MASK_C_LH, match_opcode, INSN_ALIAS|INSN_DREF|INSN_2_BYTE },
+ {"lh",          0, INSN_CLASS_I, "d,o(s)",    MATCH_LH, MASK_LH, match_opcode, INSN_DREF|INSN_2_BYTE },
+ {"lh",          0, INSN_CLASS_I, "d,A",       0, (int) M_Lx, match_rd_nonzero, INSN_MACRO },
+ {"lhu",         0, INSN_CLASS_ZCB, "Ct,Wch(Cs)", MATCH_C_LHU, MASK_C_LHU, match_opcode, INSN_ALIAS|INSN_DREF|INSN_2_BYTE },
++{"lhu",        32, INSN_CLASS_XWCHC, "Ct,Xw5(Cc)", MATCH_XWCHC_LHUSP, MASK_XWCHC_LHUSP, match_opcode, INSN_ALIAS|INSN_DREF|INSN_2_BYTE },
++{"lhu",        32, INSN_CLASS_XWCHC, "Ct,Xw6(Cs)", MATCH_XWCHC_LHU, MASK_XWCHC_LHU, match_opcode, INSN_ALIAS|INSN_DREF|INSN_2_BYTE },
+ {"lhu",         0, INSN_CLASS_I, "d,o(s)",    MATCH_LHU, MASK_LHU, match_opcode, INSN_DREF|INSN_2_BYTE },
+ {"lhu",         0, INSN_CLASS_I, "d,A",       0, (int) M_Lx, match_rd_nonzero, INSN_MACRO },
+ {"lw",          0, INSN_CLASS_C, "d,Cm(Cc)",  MATCH_C_LWSP, MASK_C_LWSP, match_rd_nonzero, INSN_ALIAS|INSN_DREF|INSN_4_BYTE },
+@@ -560,9 +564,13 @@ const struct riscv_opcode riscv_opcodes[] =
+ {"sgt",         0, INSN_CLASS_I, "d,t,s",     MATCH_SLT, MASK_SLT, match_opcode, INSN_ALIAS },
+ {"sgtu",        0, INSN_CLASS_I, "d,t,s",     MATCH_SLTU, MASK_SLTU, match_opcode, INSN_ALIAS },
+ {"sb",          0, INSN_CLASS_ZCB, "Ct,Wcb(Cs)", MATCH_C_SB, MASK_C_SB, match_opcode, INSN_DREF|INSN_1_BYTE|INSN_ALIAS },
++{"sb",         32, INSN_CLASS_XWCHC, "Ct,Xw4(Cc)", MATCH_XWCHC_SBSP, MASK_XWCHC_SBSP, match_opcode, INSN_DREF|INSN_1_BYTE|INSN_ALIAS },
++{"sb",         32, INSN_CLASS_XWCHC, "Ct,Xwb(Cs)", MATCH_XWCHC_SB, MASK_XWCHC_SB, match_opcode, INSN_DREF|INSN_1_BYTE|INSN_ALIAS },
+ {"sb",          0, INSN_CLASS_I, "t,q(s)",    MATCH_SB, MASK_SB, match_opcode, INSN_DREF|INSN_1_BYTE },
+ {"sb",          0, INSN_CLASS_I, "t,A,s",     0, (int) M_Sx_FSx, match_rs1_nonzero, INSN_MACRO },
+ {"sh",          0, INSN_CLASS_ZCB, "Ct,Wch(Cs)", MATCH_C_SH, MASK_C_SH, match_opcode, INSN_DREF|INSN_2_BYTE|INSN_ALIAS },
++{"sh",         32, INSN_CLASS_XWCHC, "Ct,Xw5(Cc)", MATCH_XWCHC_SHSP, MASK_XWCHC_SHSP, match_opcode, INSN_DREF|INSN_2_BYTE|INSN_ALIAS },
++{"sh",         32, INSN_CLASS_XWCHC, "Ct,Xw6(Cs)", MATCH_XWCHC_SH, MASK_XWCHC_SH, match_opcode, INSN_DREF|INSN_2_BYTE|INSN_ALIAS },
+ {"sh",          0, INSN_CLASS_I, "t,q(s)",    MATCH_SH, MASK_SH, match_opcode, INSN_DREF|INSN_2_BYTE },
+ {"sh",          0, INSN_CLASS_I, "t,A,s",     0, (int) M_Sx_FSx, match_rs1_nonzero, INSN_MACRO },
+ {"sw",          0, INSN_CLASS_C, "CV,CM(Cc)", MATCH_C_SWSP, MASK_C_SWSP, match_opcode, INSN_ALIAS|INSN_DREF|INSN_4_BYTE },
+@@ -3463,6 +3471,16 @@ const struct riscv_opcode riscv_opcodes[] =
+ {"sf.vfnrclip.xu.f.qf", 0, INSN_CLASS_XSFVFNRCLIPXFQF, "Vd,Vt,S", MATCH_SFVFNRCLIPXUFQF, MASK_SFVFNRCLIPXUFQF, match_opcode, 0},
+ {"sf.vfnrclip.x.f.qf",  0, INSN_CLASS_XSFVFNRCLIPXFQF, "Vd,Vt,S", MATCH_SFVFNRCLIPXFQF, MASK_SFVFNRCLIPXFQF, match_opcode, 0},
+ 
++/* Qinghen QingKe Xw instructions. */
++{"qk.c.lbu",   32, INSN_CLASS_XWCHC, "Ct,Xwb(Cs)", MATCH_XWCHC_LBU,   MASK_XWCHC_LBU,   match_opcode, INSN_DREF|INSN_1_BYTE },
++{"qk.c.lhu",   32, INSN_CLASS_XWCHC, "Ct,Xw6(Cs)", MATCH_XWCHC_LHU,   MASK_XWCHC_LHU,   match_opcode, INSN_DREF|INSN_2_BYTE },
++{"qk.c.sb",    32, INSN_CLASS_XWCHC, "Ct,Xwb(Cs)", MATCH_XWCHC_SB,    MASK_XWCHC_SB,    match_opcode, INSN_DREF|INSN_1_BYTE },
++{"qk.c.sh",    32, INSN_CLASS_XWCHC, "Ct,Xw6(Cs)", MATCH_XWCHC_SH,    MASK_XWCHC_SH,    match_opcode, INSN_DREF|INSN_2_BYTE },
++{"qk.c.lbusp", 32, INSN_CLASS_XWCHC, "Ct,Xw4(Cc)", MATCH_XWCHC_LBUSP, MASK_XWCHC_LBUSP, match_opcode, INSN_DREF|INSN_1_BYTE },
++{"qk.c.lhusp", 32, INSN_CLASS_XWCHC, "Ct,Xw5(Cc)", MATCH_XWCHC_LHUSP, MASK_XWCHC_LHUSP, match_opcode, INSN_DREF|INSN_2_BYTE },
++{"qk.c.sbsp",  32, INSN_CLASS_XWCHC, "Ct,Xw4(Cc)", MATCH_XWCHC_SBSP,  MASK_XWCHC_SBSP,  match_opcode, INSN_DREF|INSN_1_BYTE },
++{"qk.c.shsp",  32, INSN_CLASS_XWCHC, "Ct,Xw5(Cc)", MATCH_XWCHC_SHSP,  MASK_XWCHC_SHSP,  match_opcode, INSN_DREF|INSN_2_BYTE },
++
+ /* Terminate the list.  */
+ {0, 0, INSN_CLASS_NONE, 0, 0, 0, 0, 0}
+ };
+-- 
+2.43.0
+

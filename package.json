@@ -114,5 +114,8 @@
   },
   "engines": {
     "node": " >=20.0"
+  },
+  "dependencies": {
+    "xpm": "^0.20.8"
   }
 }

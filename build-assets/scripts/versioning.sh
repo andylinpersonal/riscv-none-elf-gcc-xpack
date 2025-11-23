@@ -9,6 +9,34 @@
 
 # -----------------------------------------------------------------------------
 
+MULTILIB_LIST_NORDIC_VPR="rv32emc_zicsr_zba_zbb_zbc_zbs_zcb-ilp32e--"
+
+MULTILIB_LIST_WCH=" \
+  rv32ec-ilp32e-- \
+  rv32ec_xwchc-ilp32e-- \
+  rv32ec_zmmul-ilp32e-- \
+  rv32ec_zmmul_xwchc-ilp32e-- \
+  \
+  rv32imac-ilp32-- \
+  rv32imac_xwchc-ilp32-- \
+  rv32imc_zba_zbb_zbc_zbs-ilp32-- \
+  rv32imc_zba_zbb_zbc_zbs_xwchc-ilp32-- \
+  \
+  rv32imafc-ilp32f-- \
+  rv32imafc_xwchc-ilp32f-- \
+  rv32imafc_zba_zbb_zbc_zbs-ilp32f-- \
+  rv32imafc_zba_zbb_zbc_zbs_xwchc-ilp32f--"
+
+MULTILIB_LIST_RP2350=" \
+  rv32ima_zicsr_zifencei_zba_zbb_zbs_zbkb_zca_zcb_zcmp-ilp32--"
+
+export XBB_APPLICATION_GCC_MULTILIB_LIST=" \
+  $MULTILIB_LIST_NORDIC_VPR \
+  $MULTILIB_LIST_WCH \
+  $MULTILIB_LIST_RP2350 \
+  rv64imac-lp64-- \
+  rv64imafdc-lp64d--"
+
 function set_multilib_list() {
   # Releases from 14.2.*-3 up (December 2024) use the Debian list,
   # with two more combinations:
@@ -203,7 +231,7 @@ function application_build_versioned_components()
     XBB_BINUTILS_ARCHIVE_NAME="binutils-${XBB_BINUTILS_VERSION}.tar.xz"
     XBB_BINUTILS_ARCHIVE_URL="https://ftpmirror.gnu.org/gnu/binutils/${XBB_BINUTILS_ARCHIVE_NAME}"
 
-    XBB_BINUTILS_PATCH_FILE_NAME="binutils-${XBB_BINUTILS_VERSION}.patch"
+    XBB_BINUTILS_PATCH_FILE_NAME="binutils-${XBB_BINUTILS_VERSION}.git.patch"
 
     # XBB_GCC_VERSION computer from XBB_RELEASE_VERSION
     XBB_GCC_SRC_FOLDER_NAME="gcc-${XBB_GCC_VERSION}"
@@ -569,7 +597,7 @@ function application_build_versioned_components()
     XBB_BINUTILS_ARCHIVE_NAME="binutils-${XBB_BINUTILS_VERSION}.tar.xz"
     XBB_BINUTILS_ARCHIVE_URL="https://ftpmirror.gnu.org/gnu/binutils/${XBB_BINUTILS_ARCHIVE_NAME}"
 
-    XBB_BINUTILS_PATCH_FILE_NAME="binutils-${XBB_BINUTILS_VERSION}.patch"
+    XBB_BINUTILS_PATCH_FILE_NAME="binutils-${XBB_BINUTILS_VERSION}.git.patch"
 
     # XBB_GCC_VERSION computer from XBB_RELEASE_VERSION
     XBB_GCC_SRC_FOLDER_NAME="gcc-${XBB_GCC_VERSION}"
@@ -821,7 +849,7 @@ function application_build_versioned_components()
     XBB_BINUTILS_ARCHIVE_NAME="binutils-${XBB_BINUTILS_VERSION}.tar.xz"
     XBB_BINUTILS_ARCHIVE_URL="https://ftpmirror.gnu.org/gnu/binutils/${XBB_BINUTILS_ARCHIVE_NAME}"
 
-    XBB_BINUTILS_PATCH_FILE_NAME="binutils-${XBB_BINUTILS_VERSION}.patch"
+    XBB_BINUTILS_PATCH_FILE_NAME="binutils-${XBB_BINUTILS_VERSION}.git.patch"
 
     # XBB_GCC_VERSION computer from XBB_RELEASE_VERSION
     XBB_GCC_SRC_FOLDER_NAME="gcc-${XBB_GCC_VERSION}"
@@ -1051,7 +1079,7 @@ function application_build_versioned_components()
     XBB_BINUTILS_ARCHIVE_NAME="binutils-${XBB_BINUTILS_VERSION}.tar.xz"
     XBB_BINUTILS_ARCHIVE_URL="https://ftpmirror.gnu.org/gnu/binutils/${XBB_BINUTILS_ARCHIVE_NAME}"
 
-    XBB_BINUTILS_PATCH_FILE_NAME="binutils-${XBB_BINUTILS_VERSION}.patch"
+    XBB_BINUTILS_PATCH_FILE_NAME="binutils-${XBB_BINUTILS_VERSION}.git.patch"
 
     # XBB_GCC_VERSION computer from XBB_RELEASE_VERSION
     XBB_GCC_SRC_FOLDER_NAME="gcc-${XBB_GCC_VERSION}"
